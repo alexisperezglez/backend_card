@@ -14,6 +14,7 @@ import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -68,6 +69,7 @@ public class CardServices {
                 } else {
                     card.setId(1);
                 }
+                card.setCreateAt(new Date());
                 return service.save(card);
             });
 
@@ -77,11 +79,27 @@ public class CardServices {
     public Mono<ServerResponse> updateCard(final ServerRequest request) {
         Mono<Card> cardMono = request.bodyToMono(Card.class);
 
-        return cardMono.flatMap(card -> service.save(card)).flatMap(card -> ServerResponse.ok().body(Mono.just(card), Card.class));
+        return cardMono.flatMap(this.service::save).flatMap(card -> ServerResponse.ok().body(Mono.just(card), Card.class));
     }
 
     public Mono<ServerResponse> deleteCard(final ServerRequest request) {
         Long id = Long.parseLong(request.pathVariable("idCard"));
         return ServerResponse.ok().body(service.deleteById(id), Card.class);
+    }
+
+    public Mono<ServerResponse> saveAll(final ServerRequest request) {
+        Card card = Card.builder().active(false).createAt(new Date()).description("prueba").build();
+        return Mono.just(card)
+                .map(cardMono -> {
+                    return generatorService.generateSequence("user_sequence").flatMap(aLong -> {
+                        if (aLong > 0L) {
+                            card.setId(aLong);
+                        } else {
+                            card.setId(1);
+                        }
+                        return service.save(cardMono);
+                    });
+                })
+                .flatMap(cardFlux -> ServerResponse.ok().body(this.service.findAll(), Card.class));
     }
 }
